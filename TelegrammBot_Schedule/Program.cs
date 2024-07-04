@@ -13,14 +13,12 @@ using CancellationTokenSource cts = new CancellationTokenSource();
 
 bool makeReminder = false;
 Dictionary<long, GameState> games = new Dictionary<long, GameState>();
-List<DelayedMessage> delayedMessages = new List<DelayedMessage>();
 
 var buttons = new KeyboardButton[]
 {
     "Игра", "Напоминалка"
 };
 
-SendDelayedMessagesAsync(cts.Token);
 botClient.StartReceiving(
     updateHandler: HandleUpdateAsync,
     pollingErrorHandler: HandlePollingErrorAsync,
@@ -82,8 +80,15 @@ async Task MakeReminderAsync(Message message)
             DateTime dateMesage = new DateTime(date[0], date[1], date[2], time[0], time[1], 0);
             DelayedMessage tmpMessage = new DelayedMessage(dateMesage, message.Chat.Id, settings[2]);
 
-            delayedMessages.Add(tmpMessage);
-
+            using (FileStream fs = new FileStream("DelayedMessages.json", FileMode.OpenOrCreate))
+            {
+                List<DelayedMessage>? messages = await JsonSerializer
+                                                    .DeserializeAsync<List<DelayedMessage>>(fs, JsonSerializerOptions.Default);
+                messages!.Add(tmpMessage);
+                fs.SetLength(0);
+                await JsonSerializer.SerializeAsync<List<DelayedMessage>>(fs, messages!
+                                                            .OrderBy(m => m.DateTime).ToList());
+            }
             await botClient.SendTextMessageAsync(message.Chat.Id, "Напоминалка создана!",
                 replyMarkup: new ReplyKeyboardMarkup(buttons) { ResizeKeyboard = true });
             makeReminder = false;
@@ -98,20 +103,6 @@ async Task MakeReminderAsync(Message message)
             "Введите её заново, но в этот раз правильно:");
     }
     
-}
-
-async Task SendDelayedMessagesAsync(CancellationToken cancellationToken)
-{
-    while (!cancellationToken.IsCancellationRequested)
-    {
-        if (delayedMessages != null && delayedMessages.OrderBy(m => m.DateTime).First().DateTime
-                                                                                    <= DateTime.Now)
-        {
-            var message = delayedMessages.OrderBy(m => m.DateTime).First();
-            await botClient.SendTextMessageAsync(message.ChatId, message.Text);
-            delayedMessages.Remove(message);
-        }
-    }
 }
 
 async Task GuessNumberGameAsync(ITelegramBotClient botClient, Message message, GameState game)
