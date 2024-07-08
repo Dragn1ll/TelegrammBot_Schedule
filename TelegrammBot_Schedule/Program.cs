@@ -51,7 +51,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         await botClient.SendTextMessageAsync(message.Chat.Id, "Загадал число. Ваш первый ход:");
     }
     else if (makeReminder)
-        await MakeReminderAsync(message);
+        MakeReminderAsync(message);
     else if (messageText.ToLower() == "напоминалка")
     {
         await botClient.SendTextMessageAsync(message.Chat.Id, "Введите дату и сообщение в формате(время пишите по МСК):\n" +
@@ -77,29 +77,29 @@ async Task MakeReminderAsync(Message message)
         {
             var date = settings[0].Split(".").Select(s => int.Parse(s)).ToArray();
             var time = settings[1].Split(":").Select(s => int.Parse(s)).ToArray();
-            DateTime dateMesage = new DateTime(date[0], date[1], date[2], time[0], time[1], 0);
-            DelayedMessage tmpMessage = new DelayedMessage(dateMesage, message.Chat.Id, settings[2]);
+            DateTime dateMessage = new DateTime(date[0], date[1], date[2], time[0], time[1], 0);
 
-            using (FileStream fs = new FileStream("DelayedMessages.json", FileMode.OpenOrCreate))
+            if (dateMessage <= DateTime.Now)
             {
-                List<DelayedMessage>? messages = await JsonSerializer
-                                                    .DeserializeAsync<List<DelayedMessage>>(fs, JsonSerializerOptions.Default);
-                messages!.Add(tmpMessage);
-                fs.SetLength(0);
-                await JsonSerializer.SerializeAsync<List<DelayedMessage>>(fs, messages!
-                                                            .OrderBy(m => m.DateTime).ToList());
+                await botClient.SendTextMessageAsync(message.Chat.Id, "Время слишком раннее!");
+                return;
             }
-            await botClient.SendTextMessageAsync(message.Chat.Id, "Напоминалка создана!",
+            
+            await botClient.SendTextMessageAsync(message.Chat.Id, "Напоминалка создана! Ожидайте.",
                 replyMarkup: new ReplyKeyboardMarkup(buttons) { ResizeKeyboard = true });
+
             makeReminder = false;
+            await Task.Delay(dateMessage - DateTime.Now);
+            await botClient.SendTextMessageAsync(message.Chat.Id, settings[2]);
+
         }
         else
-            await botClient.SendTextMessageAsync(message.Chat.Id, "Вы что-то не дописали.\n" +
+            await botClient.SendTextMessageAsync(message.Chat.Id, "Вы что-то не дописали или время раньше нынешнего.\n" +
             "Введите её заново, но в этот раз правильно:");
     }
     catch
     {
-        await botClient.SendTextMessageAsync(message.Chat.Id, "Вы записи сверху допущена ошибка.\n" +
+        await botClient.SendTextMessageAsync(message.Chat.Id, "В записи сверху допущена ошибка.\n" +
             "Введите её заново, но в этот раз правильно:");
     }
     
