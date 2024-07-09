@@ -1,5 +1,4 @@
-﻿using System.Text.Json;
-using Telegram.Bot;
+﻿using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
@@ -11,7 +10,7 @@ var botClient = new TelegramBotClient("6805957268:AAGn1Cy7hLnTI39GxWoPCacX_74Co2
 
 using CancellationTokenSource cts = new CancellationTokenSource();
 
-bool makeReminder = false;
+List<long> makeReminder = new List<long>();
 Dictionary<long, GameState> games = new Dictionary<long, GameState>();
 
 var buttons = new KeyboardButton[]
@@ -50,7 +49,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         games.Add(message.Chat.Id, new GameState(message.Chat.Id));
         await botClient.SendTextMessageAsync(message.Chat.Id, "Загадал число. Ваш первый ход:");
     }
-    else if (makeReminder)
+    else if (makeReminder.Contains(message.Chat.Id))
         MakeReminderAsync(message);
     else if (messageText.ToLower() == "напоминалка")
     {
@@ -58,7 +57,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             "гггг.мм.дд|чч:мм|сообщение\n" +
             "Пример: 2005.3.31|6:05|С днём рождения!",
             replyMarkup: new ReplyKeyboardRemove());
-        makeReminder = true;
+        makeReminder.Add(message.Chat.Id);
     }
     else
     {
@@ -88,7 +87,7 @@ async Task MakeReminderAsync(Message message)
             await botClient.SendTextMessageAsync(message.Chat.Id, "Напоминалка создана! Ожидайте.",
                 replyMarkup: new ReplyKeyboardMarkup(buttons) { ResizeKeyboard = true });
 
-            makeReminder = false;
+            makeReminder.Remove(message.Chat.Id);
             await Task.Delay(dateMessage - DateTime.Now);
             await botClient.SendTextMessageAsync(message.Chat.Id, settings[2]);
 
