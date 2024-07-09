@@ -1,4 +1,5 @@
-﻿using Telegram.Bot;
+﻿using System.Text.Json;
+using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
@@ -11,7 +12,8 @@ var botClient = new TelegramBotClient("6805957268:AAGn1Cy7hLnTI39GxWoPCacX_74Co2
 using CancellationTokenSource cts = new CancellationTokenSource();
 
 List<long> makeReminder = new List<long>();
-Dictionary<long, GameState> games = new Dictionary<long, GameState>();
+FileStream fsGames = new FileStream("Games.json", FileMode.OpenOrCreate);
+Dictionary<long, GameState>? games = JsonSerializer.Deserialize<Dictionary<long, GameState>>(fsGames);
 
 var buttons = new KeyboardButton[]
 {
@@ -36,7 +38,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
 
     await Console.Out.WriteLineAsync($"{message.Chat.Id} wrote {messageText}");
 
-    if (games.ContainsKey(message.Chat.Id))
+    if (games!.ContainsKey(message.Chat.Id))
         await GuessNumberGameAsync(botClient, message, games[message.Chat.Id]);
     else if (messageText.ToLower() == "игра")
     {
@@ -47,6 +49,9 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
                                                 "- Я буду давать подсказки (больше/меньше).\n" +
                                                 "Удачи!");
         games.Add(message.Chat.Id, new GameState(message.Chat.Id));
+        fsGames.SetLength(0);
+        await JsonSerializer.SerializeAsync<Dictionary<long, GameState>>(fsGames, games);
+
         await botClient.SendTextMessageAsync(message.Chat.Id, "Загадал число. Ваш первый ход:");
     }
     else if (makeReminder.Contains(message.Chat.Id))
@@ -104,6 +109,13 @@ async Task MakeReminderAsync(Message message)
     
 }
 
+string MyDictionaryToJson(Dictionary<long, GameState> dict)
+{
+    var entries = dict.Select(d =>
+        string.Format("\"{0}\": {1}", d.Key, JsonSerializer.Serialize(d.Value)));
+    return "{" + string.Join(",", entries) + "}";
+}
+
 async Task GuessNumberGameAsync(ITelegramBotClient botClient, Message message, GameState game)
 {
     if (!int.TryParse(message.Text, out int userNum)) return;
@@ -114,6 +126,8 @@ async Task GuessNumberGameAsync(ITelegramBotClient botClient, Message message, G
             replyMarkup: new ReplyKeyboardMarkup(buttons) { ResizeKeyboard = true });
         
         games.Remove(message.Chat.Id);
+        fsGames.SetLength(0);
+        await JsonSerializer.SerializeAsync(fsGames, games);
     }
     else if (userNum > game.RandomNumber)
     {
@@ -133,6 +147,8 @@ async Task GuessNumberGameAsync(ITelegramBotClient botClient, Message message, G
                                             replyMarkup: new ReplyKeyboardMarkup(buttons) { ResizeKeyboard = true });
 
         games.Remove(message.Chat.Id);
+        fsGames.SetLength(0);
+        await JsonSerializer.SerializeAsync(fsGames, games);
     }
 }
 

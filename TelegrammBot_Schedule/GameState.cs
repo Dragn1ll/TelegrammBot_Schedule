@@ -1,5 +1,6 @@
 ﻿namespace TelegrammBot_Schedule;
 
+[Serializable]
 public class GameState
 {
     public int RandomNumber { get; }
