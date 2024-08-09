@@ -1,16 +1,9 @@
 ﻿namespace TelegrammBot_Schedule;
 
 [Serializable]
-public class DelayedMessage
+public class DelayedMessage(long chatId)
 {
-    public DateTime DateTime { get; }
-    public long ChatId { get; }
-    public string Text { get; }
-
-    public DelayedMessage(DateTime dateTime, long chatId, string message)
-    {
-        DateTime = dateTime;
-        ChatId = chatId;
-        Text = message;
-    }
+    public long ChatId { get; } = chatId;
+    public DateTime DateTime { get; set; }
+    public string Text { get; set; }
 }

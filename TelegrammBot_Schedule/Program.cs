@@ -1,9 +1,7 @@
 ﻿using System.Text.Json;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
-using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegrammBot_Schedule;
 
@@ -11,7 +9,12 @@ var botClient = new TelegramBotClient("6805957268:AAGn1Cy7hLnTI39GxWoPCacX_74Co2
 
 using CancellationTokenSource cts = new CancellationTokenSource();
 
-List<long> makeReminder = new List<long>();
+FileStream fsReminder = new FileStream("DelayedMessages.json", FileMode.OpenOrCreate);
+SendReminderAsync(JsonSerializer.Deserialize<List<DelayedMessage>>(fsReminder));
+fsReminder.SetLength(0);
+JsonSerializer.Serialize(fsReminder, new List<DelayedMessage>());
+fsReminder.Close();
+List<DelayedMessage> makeReminder = new List<DelayedMessage>();
 
 FileStream fsGames = new FileStream("Games.json", FileMode.OpenOrCreate);
 Dictionary<long, GameState>? games = JsonSerializer.Deserialize<Dictionary<long, GameState>>(fsGames);
@@ -59,15 +62,21 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         }
         await botClient.SendTextMessageAsync(message.Chat.Id, "Загадал число. Ваш первый ход:");
     }
-    else if (makeReminder.Contains(message.Chat.Id))
-        MakeReminderAsync(message);
+    else if (makeReminder.Where(r => r.ChatId == message.Chat.Id && r.Text == null).Count() == 1)
+    {
+        var tmp = makeReminder
+            .Where(r => r.ChatId == message.Chat.Id && r.Text == null)
+            .First();
+        tmp.Text = messageText;
+        MakeReminderAsync(tmp);
+    }
     else if (messageText.ToLower() == "напоминалка")
     {
         await botClient.SendTextMessageAsync(message.Chat.Id, "Введите дату и сообщение в формате(время пишите по МСК):\n" +
             "гггг.мм.дд|чч:мм|сообщение\n" +
             "Пример: 2005.3.31|6:05|С днём рождения!",
             replyMarkup: new ReplyKeyboardRemove());
-        makeReminder.Add(message.Chat.Id);
+        makeReminder.Add(new DelayedMessage(message.Chat.Id));
     }
     else
     {
@@ -76,7 +85,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
     }
 }
 
-async Task MakeReminderAsync(Message message)
+async Task MakeReminderAsync(DelayedMessage message)
 {
     var settings = message.Text!.Split('|');
 
@@ -86,32 +95,53 @@ async Task MakeReminderAsync(Message message)
         {
             var date = settings[0].Split(".").Select(s => int.Parse(s)).ToArray();
             var time = settings[1].Split(":").Select(s => int.Parse(s)).ToArray();
-            DateTime dateMessage = new DateTime(date[0], date[1], date[2], time[0], time[1], 0);
+            message.Text = settings[2];
+            message.DateTime = new DateTime(date[0], date[1], date[2], time[0], time[1], 0);
 
-            if (dateMessage <= DateTime.Now)
+            if (message.DateTime <= DateTime.Now)
             {
-                await botClient.SendTextMessageAsync(message.Chat.Id, "Время слишком раннее!");
+                await botClient.SendTextMessageAsync(message.ChatId, "Время слишком раннее." +
+                    " Перепишите запрос, пожалуйста.");
                 return;
             }
             
-            await botClient.SendTextMessageAsync(message.Chat.Id, "Напоминалка создана! Ожидайте.",
+            await botClient.SendTextMessageAsync(message.ChatId, "Напоминалка создана! Ожидайте.",
                 replyMarkup: new ReplyKeyboardMarkup(buttons) { ResizeKeyboard = true });
 
-            makeReminder.Remove(message.Chat.Id);
-            await Task.Delay(dateMessage - DateTime.Now);
-            await botClient.SendTextMessageAsync(message.Chat.Id, settings[2]);
+            await Task.Delay(message.DateTime - DateTime.Now);
+            makeReminder.Remove(message);
+            await botClient.SendTextMessageAsync(message.ChatId, message.Text);
 
         }
         else
-            await botClient.SendTextMessageAsync(message.Chat.Id, "Вы что-то не дописали или время раньше нынешнего.\n" +
+            await botClient.SendTextMessageAsync(message.ChatId, "Вы что-то не дописали или время раньше нынешнего.\n" +
             "Введите её заново, но в этот раз правильно:");
     }
     catch
     {
-        await botClient.SendTextMessageAsync(message.Chat.Id, "В записи сверху допущена ошибка.\n" +
+        await botClient.SendTextMessageAsync(message.ChatId, "В записи сверху допущена ошибка.\n" +
             "Введите её заново, но в этот раз правильно:");
     }
-    
+}
+
+async Task SendReminderAsync(List<DelayedMessage> reminders)
+{
+    reminders.OrderBy(r => r.DateTime);
+    foreach (var reminder in reminders)
+    {
+        if (reminder.DateTime <= DateTime.Now)
+        {
+            await botClient.SendTextMessageAsync(reminder.ChatId, $"Простите, " +
+                $"если опоздали с напоминанием:\n{reminder.Text}");
+            reminders.Remove(reminder);
+        }
+        else
+        {
+            await Task.Delay(reminder.DateTime - DateTime.Now);
+            reminders.Remove(reminder);
+            await botClient.SendTextMessageAsync(reminder.ChatId, reminder.Text);
+        }
+    }
 }
 
 async Task GuessNumberGameAsync(ITelegramBotClient botClient, Message message, GameState game)
