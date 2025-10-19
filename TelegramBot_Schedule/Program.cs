@@ -3,21 +3,21 @@ using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
-using TelegrammBot_Schedule;
+using TelegramBot_Schedule;
 
-var botClient = new TelegramBotClient("6805957268:AAGn1Cy7hLnTI39GxWoPCacX_74Co2SM2GI");
+var botClient = new TelegramBotClient("");
 
-using CancellationTokenSource cts = new CancellationTokenSource();
+using var cts = new CancellationTokenSource();
 
-FileStream fsReminder = new FileStream("DelayedMessages.json", FileMode.OpenOrCreate);
-SendReminderAsync(JsonSerializer.Deserialize<List<DelayedMessage>>(fsReminder));
+var fsReminder = new FileStream("DelayedMessages.json", FileMode.OpenOrCreate);
+await SendReminderAsync(JsonSerializer.Deserialize<List<DelayedMessage>>(fsReminder));
 fsReminder.SetLength(0);
 JsonSerializer.Serialize(fsReminder, new List<DelayedMessage>());
 fsReminder.Close();
-List<DelayedMessage> makeReminder = new List<DelayedMessage>();
+var makeReminder = new List<DelayedMessage>();
 
-FileStream fsGames = new FileStream("Games.json", FileMode.OpenOrCreate);
-Dictionary<long, GameState>? games = JsonSerializer.Deserialize<Dictionary<long, GameState>>(fsGames);
+await using var fsGames = new FileStream("Games.json", FileMode.OpenOrCreate);
+var games = JsonSerializer.Deserialize<Dictionary<long, GameState>>(fsGames);
 fsGames.Close();
 
 var buttons = new KeyboardButton[]
@@ -55,22 +55,21 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
                                                 "Удачи!");
         games.Add(message.Chat.Id, new GameState(message.Chat.Id));
 
-        using (FileStream fsGames = new FileStream("Games.json", FileMode.OpenOrCreate))
+        await using (FileStream fsGames = new FileStream("Games.json", FileMode.OpenOrCreate))
         {
             fsGames.SetLength(0);
             await JsonSerializer.SerializeAsync<Dictionary<long, GameState>>(fsGames, games);
         }
         await botClient.SendTextMessageAsync(message.Chat.Id, "Загадал число. Ваш первый ход:");
     }
-    else if (makeReminder.Where(r => r.ChatId == message.Chat.Id && r.Text == null).Count() == 1)
+    else if (makeReminder.Count(r => r.ChatId == message.Chat.Id && r.Text == null) == 1)
     {
         var tmp = makeReminder
-            .Where(r => r.ChatId == message.Chat.Id && r.Text == null)
-            .First();
+            .First(r => r.ChatId == message.Chat.Id && r.Text == null);
         tmp.Text = messageText;
-        MakeReminderAsync(tmp);
+        await MakeReminderAsync(tmp);
     }
-    else if (messageText.ToLower() == "напоминалка")
+    else if (messageText.Equals("напоминалка", StringComparison.CurrentCultureIgnoreCase))
     {
         await botClient.SendTextMessageAsync(message.Chat.Id, "Введите дату и сообщение в формате(время пишите по МСК):\n" +
             "гггг.мм.дд|чч:мм|сообщение\n" +
@@ -124,10 +123,10 @@ async Task MakeReminderAsync(DelayedMessage message)
     }
 }
 
-async Task SendReminderAsync(List<DelayedMessage> reminders)
+async Task SendReminderAsync(List<DelayedMessage>? reminders)
 {
-    reminders.OrderBy(r => r.DateTime);
-    foreach (var reminder in reminders)
+    var orderedEnumerable = reminders.OrderBy(r => r.DateTime);
+    foreach (var reminder in orderedEnumerable)
     {
         if (reminder.DateTime <= DateTime.Now)
         {
@@ -146,7 +145,7 @@ async Task SendReminderAsync(List<DelayedMessage> reminders)
 
 async Task GuessNumberGameAsync(ITelegramBotClient botClient, Message message, GameState game)
 {
-    if (!int.TryParse(message.Text, out int userNum)) return;
+    if (!int.TryParse(message.Text, out var userNum)) return;
 
     if (userNum == game.RandomNumber)
     {

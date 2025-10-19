@@ -1,4 +1,4 @@
-﻿namespace TelegrammBot_Schedule;
+﻿namespace TelegramBot_Schedule;
 
 [Serializable]
 public class DelayedMessage(long chatId)
